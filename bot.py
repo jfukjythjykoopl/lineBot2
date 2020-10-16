@@ -1,54 +1,70 @@
+from flask import Flask, jsonify, request
 import os
-from flask import Flask, request, abort, jsonify
 import json
-
-from linebot import (
-    LineBotApi, WebhookHandler
-)
-from linebot.exceptions import (
-    InvalidSignatureError
-)
-from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage,
-)
+import requests
 
 app = Flask(__name__)
 
-line_bot_api = LineBotApi(os.environ['CHANNEL_ACCESS_TOKEN'])
-handler = WebhookHandler(os.environ['CHANNEL_SECRET'])
-
-@app.route("/")
+@app.route('/')
 def index():
-    return "Hello World สวัสดีชาวโลก"
-
-@app.route("/callback", methods=['POST'])
-def callback():
-#    return "ok"
-    # get X-Line-Signature header value
-    signature = request.headers['X-Line-Signature']
-
-    # get request body as text
-    body = request.get_data(as_text=True)
-    app.logger.info("Request body: " + body)
-
-    # handle webhook body
+    a=os.environ['Authorization']
     try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        print("Invalid signature. Please check your channel access token/channel secret.")
-        abort(400)
+        f = open("student.csv", "r")
+        for line in f.readlines():
+            print(line)
+            a = line.split(",")
+            if(a[0]=="00001"):
+                return a[4]
+        f.close()
+    except Exception:
+        return "Could not read to file"
+   
+    return "นางสาวสโรชา เลขที่ 38 ชั้น ม.4/15"
 
-    return 'OK'
+@app.route("/webhook", methods=['POST'])
+def webhook():
+    if request.method == 'POST':
+        return "OK"
 
+@app.route('/callback', methods=['POST'])
+def callback():
+    json_line = request.get_json()
+    json_line = json.dumps(json_line)
+    decoded = json.loads(json_line)
+#    user = decoded["events"][0]['replyToken']
+#    userText = decoded["events"][0]['message']['text']
+    user = decoded['originalDetectIntentRequest']['payload']['data']['replyToken']
+    userText = decoded['queryResult']['intent']['displayName']
+    userAction = decoded['queryResult']['parameters']['studentId']
+    if(userText=="ถามชื่อ"):
+        try:
+            f = open("student.csv", "r")
+            for line in f.readlines():
+                a = line.split(",")
+                if(userAction==a[0]):
+#                   nameList=nameList+", "+a[4]
+                    sendText(user,a[4])
+            f.close()
+#           sendText(user,nameList)
+        except Exception:
+            sendText(user,"ขออภัย..ไม่สามารถเปิดไฟล์ได้")
+    elif(userText=="ไอ้บ้า"):
+        sendText(user,"ไม่บ้านะ")
 
-@handler.add(MessageEvent, message=TextMessage)
-def handle_message(event):
-    line_bot_api.reply_message(
-        event.reply_token,
-#        TextSendMessage(text=event.message.text)
-        TextSendMessage(text="สบายดีไหม")
-    )
+    return '',200
 
+def sendText(user, text):
+  LINE_API = 'https://api.line.me/v2/bot/message/reply'
+  headers = {
+    'Content-Type': 'application/json; charset=UTF-8',
+    'Authorization': os.environ['Authorization']    # ตั้ง Config vars ใน heroku พร้อมค่า Access token
+  }
+  data = json.dumps({
+    "replyToken":user,
+    "messages":[{"type":"text","text":text}]
+  })
+  r = requests.post(LINE_API, headers=headers, data=data) # ส่งข้อมูล
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run()
+
